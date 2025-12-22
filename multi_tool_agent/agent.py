@@ -1,5 +1,7 @@
 import datetime
 import os
+import requests
+
 from zoneinfo import ZoneInfo
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
@@ -9,27 +11,56 @@ from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 
 def get_weather(city: str) -> dict:
-    """Retrieves the current weather report for a specified city.
+    """Retrieves current weather for any city using Open-Meteo's free APIs."""
+    
+    # 1. Geocoding: Convert city name to coordinates
+    geo_url = "https://geocoding-api.open-meteo.com/v1/search"
+    geo_params = {
+        "name": city,
+        "count": 1,
+        "language": "en",
+        "format": "json"
+    }
 
-    Args:
-        city (str): The name of the city for which to retrieve the weather report.
+    try:
+        # requests.get will combine the URL and params correctly: 
+        # geocoding-api.open-meteo.com&...
+        geo_response = requests.get(geo_url, params=geo_params)
+        geo_data = geo_response.json()
 
-    Returns:
-        dict: status and result or error msg.
-    """
-    if city.lower() == "new york":
+        if not geo_data.get("results"):
+            return {"status": "error", "error_message": f"City '{city}' not found."}
+
+        # Extract coordinates and formal name
+        location = geo_data["results"][0]
+        lat, lon = location["latitude"], location["longitude"]
+        full_name = f"{location['name']}, {location.get('country', '')}"
+
+        # 2. Weather Fetch: Use coordinates to get current weather
+        weather_url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "current": "temperature_2m,relative_humidity_2m,weather_code",
+            "timezone": "auto"
+        }
+        
+        weather_response = requests.get(weather_url, params=params)
+        weather_data = weather_response.json()
+        
+        current = weather_data.get("current")
+        if not current:
+            return {"status": "error", "error_message": "Could not retrieve weather data."}
+
+        temp = current["temperature_2m"]
         return {
             "status": "success",
-            "report": (
-                "The weather in New York is sunny with a temperature of 25 degrees"
-                " Celsius (77 degrees Fahrenheit)."
-            ),
+            "report": f"The weather in {full_name} is currently {temp}°C."
         }
-    else:
-        return {
-            "status": "error",
-            "error_message": f"Weather information for '{city}' is not available.",
-        }
+
+    except requests.exceptions.RequestException as e:
+        return {"status": "error", "error_message": f"Network error: {str(e)}"}
+
 
 def get_current_time(city: str) -> dict:
     """
