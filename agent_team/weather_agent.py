@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 import asyncio
 from google.adk.agents import LlmAgent
@@ -74,9 +75,8 @@ async def call_agent_async(query: str, runner, user_id, session_id):
 
   # Key Concept: run_async executes the agent logic and yields Events.
   # We iterate through events to find the final answer.
+  start = time.time()
   async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
-      # You can uncomment the line below to see *all* events during execution
-      # print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}, Content: {event.content}")
 
       # Key Concept: is_final_response() marks the concluding message for the turn.
       if event.is_final_response():
@@ -88,28 +88,44 @@ async def call_agent_async(query: str, runner, user_id, session_id):
           # Add more checks here if needed (e.g., specific error codes)
           break # Stop processing events once the final response is found
 
+  print(f"Task for {query} took {time.time() - start:.2f}s")
   print(f"<<< Agent Response: {final_response_text}")
 
-async def init_session(app_name:str,user_id:str,session_id:str) -> InMemorySessionService:
-    session = await session_service.create_session(
+async def init_session(app_name:str,user_id:str,session_id:str):
+    await session_service.create_session(
         app_name = APP_NAME,
         user_id = USER_ID, 
         session_id = SESS_ID 
     )
     print(f"Session created: App='{app_name}', User='{user_id}', Session='{session_id}'")
-    return session
+
+"""
+# uncommt the followong code to run parallel run_conversation version 
+# run the queries in parallel seems not reduce the total time - maybe something limited by
+# the model service or session lock mechanism
+async def run_conversation():
+    # Schedule all three tasks at once
+    tasks = [
+        call_agent_async("What is the weather like in London?", runner, USER_ID, SESS_ID),
+        call_agent_async("How about San Jose?", runner, USER_ID, SESS_ID),
+        call_agent_async("Tell me the weather in New York", runner, USER_ID, SESS_ID)
+    ]
+    
+    # Wait for all of them to finish
+    await asyncio.gather(*tasks)
+    
+    print("All conversations completed concurrently.")
+"""
 
 async def run_conversation():
     await call_agent_async("What is the weather like in London?",
                                        runner=runner,
                                        user_id=USER_ID,
                                        session_id=SESS_ID)
-
     await call_agent_async("How about San Jose?",
                                        runner=runner,
                                        user_id=USER_ID,
                                        session_id=SESS_ID) # Expecting the tool's error message
-
     await call_agent_async("Tell me the weather in New York",
                                        runner=runner,
                                        user_id=USER_ID,
@@ -159,5 +175,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
