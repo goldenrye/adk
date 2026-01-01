@@ -115,7 +115,9 @@ async def run_conversation():
                                        user_id=USER_ID,
                                        session_id=SESS_ID)
 
-if __name__ == "__main__":
+async def main():
+
+    global session_service, runner
 
     AGENT_MODEL = LiteLlm(
         model="volcengine/doubao-seed-1-6-251015",  # Use your specific endpoint/model ID
@@ -137,8 +139,9 @@ if __name__ == "__main__":
     print(f"Agent '{weather_agent.name}' created using model '{AGENT_MODEL}'.")
 
     session_service = InMemorySessionService()
+ 
     # Create the specific session where the conversation will happen
-    session = asyncio.run(init_session(APP_NAME, USER_ID, SESS_ID))
+    await init_session(APP_NAME, USER_ID, SESS_ID)
     print(f"Session created.")
 
     # Key Concept: Runner orchestrates the agent execution loop.
@@ -150,6 +153,11 @@ if __name__ == "__main__":
     print(f"Runner created for agent '{runner.agent.name}'.")
 
     try:
-        asyncio.run(run_conversation())
+        await run_conversation()
     except Exception as e:
         print(f"An error occurred: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
+
