@@ -8,6 +8,8 @@ from volcenginesdkarkruntime import Ark
 from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
 from google.genai import types # For creating message Content/Parts
+import logging
+logging.getLogger("LiteLLM").setLevel(logging.CRITICAL)
 
 APP_NAME = "weather_tutorial_app"
 USER_ID  = "user_001"
@@ -77,16 +79,17 @@ async def call_agent_async(query: str, runner, user_id, session_id):
   # We iterate through events to find the final answer.
   start = time.time()
   async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
-
-      # Key Concept: is_final_response() marks the concluding message for the turn.
-      if event.is_final_response():
-          if event.content and event.content.parts:
-             # Assuming text response in the first part
-             final_response_text = event.content.parts[0].text
-          elif event.actions and event.actions.escalate: # Handle potential errors/escalations
-             final_response_text = f"Agent escalated: {event.error_message or 'No specific message.'}"
-          # Add more checks here if needed (e.g., specific error codes)
-          break # Stop processing events once the final response is found
+    if event.is_final_response():
+        if event.content and event.content.parts:
+            text = "".join(
+                p.text for p in event.content.parts
+                if p.text and not getattr(p, "thought", False)
+            )
+            if text:
+                final_response_text = text
+        elif event.actions and event.actions.escalate:
+            final_response_text = f"Agent escalated: {event.error_message or 'No specific message.'}"
+        # no break — let the runner finish so it can close its tracing spans cleanly
 
   print(f"Task for {query} took {time.time() - start:.2f}s")
   print(f"<<< Agent Response: {final_response_text}")
